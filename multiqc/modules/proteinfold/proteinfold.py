@@ -1,10 +1,12 @@
 import logging
 import re
+import warnings
 
 from multiqc.base_module import BaseMultiqcModule, ModuleNoSamplesFound
 from multiqc.plots import bargraph
 
 from Bio import PDB
+#from Bio import PDBConstructionWarning # supress non-standard PDB file warnings
 
 log = logging.getLogger(__name__)
 
@@ -35,52 +37,95 @@ class MultiqcModule(BaseMultiqcModule):
             info="ProteinFold - protein structure inference methods through a single nextflow pipeline interface",
             doi=["10.1038/s41586-021-03819-2", "10.1038/s41592-022-01488-1",  "10.1126/science.ade2574", "10.1126/science.adl2528", "10.48550/arXiv.2408.16975"],
         )
-    
+   
+        self.proteinfold_data = {}
+        
         for f in self.find_log_files('proteinfold/structs'):
             self.add_data_source(f, section='structs')        
             filepath = f['root'] + '/' + f['fn']
             samplename = f['s_name']
-            pLDDT = self.parse_pdb_file(filepath, samplename)
-            print(f"'file: {filepath} - confidence {pLDDT}")
+            self.proteinfold_data[samplename] = {}
+            avg_pLDDT = self.parse_pdb_file(filepath, samplename)
+            self.proteinfold_data[samplename]['avg_pLDDT'] = avg_pLDDT
+            #print(self.proteinfold_data) # DEBUG
+            #print(f"'file: {filepath} - confidence {avg_pLDDT}") # DEBUG
 
+        self.write_data_file(self.proteinfold_data, "proteinfold_avg_pLDDT", sort_cols=True) # I want tp structure and rename from avg_plDDT to summary_stats
+        self.general_stats_table()
+    
 
-  #     self.general_stats_addcols(
-  #         data_by_sample,
-  #         {
-  #             "MSA depth": {
-  #                 "title": "Related Sequence Depth (MSAs)",
-  #                 "description": "The number of related sequences (across the whole protein) that could be retrieved from the MSA (Multiple Sequence Alignment) stage",
-  #             }, 
-  #             "Average Confidence": {
-  #                 "title": "Confidence (average plDDT)",
-  #                 "description": "Structure prediction confidence score across all residues in the protein - from the mean pLDDT (predicted Local Distance Difference Test) value",
-  #                 "max": 100,
-  #                 "min": 0,
-  #                 "scale": "RdYlGn",
-  #             },
-  #             "Interface score": {
-  #                 "title": "Interface accuracy (iPTM)",
-  #                 "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the iPTM (interface predicted Template Modelling) score",
-  #                 "max": 1,
-  #                 "min": 0,
-  #                 "scale": "Greens",
-  #             },
-  #         },
-  #     )
+    def general_stats_table(self):
+        '''
+        Put protein structure prediction metrics into a general table for all different Deep Learning methods
+        '''
+        headers = {
+#           "MSA depth": {
+#               "title": "Related Sequence Depth (MSAs)",
+#               "description": "The number of related sequences (across the whole protein) that could be retrieved from the MSA (Multiple Sequence Alignment) stage",
+#           }, 
+            "avg_pLDDT": {
+                "title": "Confidence (average plDDT)",
+                "description": "Structure prediction confidence score across all residues in the protein - from the mean pLDDT (predicted Local Distance Difference Test) value",
+                "max": 100,
+                "min": 0,
+                "cond_formatting_rules": {
+                    "very-low": [ {"lt": 50}],
+                    "low": [ {"gt": 50}, {"lt": 70}],
+                    "high": [ {"gt": 70}, {"lt": 90}],
+                    "very-high": [ {"gt": 90}]
+                },
+                "cond_formatting_colours": [
+                    {"very-low": "#f0743e"},
+                    {"low": "#f9d613"},
+                    {"high": "#60c2e8"},
+                    {"very-high": "#014ecc"}
+                ]
+            },
+#           "Interface score": {
+#               "title": "Interface accuracy (iPTM)",
+#               "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the iPTM (interface predicted Template Modelling) score",
+#               "max": 1,
+#               "min": 0,
+#               "scale": "Greens",
+#               },
+        }
+        self.general_stats_addcols(self.proteinfold_data, headers)
+
+## I want to modify this to so that model_1, model_2 group. It seems to do so anyway 
+#   self.general_stats_addcols(
+#       ...,
+#       group_samples_config=SampleGroupingConfig(
+#           cols_to_sum=[ColumnKeyT("total_sequences")],
+#           cols_to_weighted_average=[
+#               (ColumnKeyT("percent_gc"), ColumnKeyT("total_sequences")),
+#               (ColumnKeyT("avg_sequence_length"), ColumnKeyT("total_sequences")),
+#               (ColumnKeyT("percent_duplicates"), ColumnKeyT("total_sequences")),
+#               (ColumnKeyT("median_sequence_length"), ColumnKeyT("total_sequences")),
+#           ],
+#           extra_functions=[_summarize_statues],
+#       )
+#   )
+  #    self.general_stats_addcols(
+  #        data_by_sample,
+  #        {
+  #        },
+  #    )
 
 
     def parse_pdb_file(self, filepath, samplename):
         '''
         Extract any MultiQC relevant info from the PDB files. Currently gets pLDDT via a function
         '''
-        pLDDT = extract_pLDDT_pdb(filepath, samplename)
-        return pLDDT
+        avg_pLDDT = extract_pLDDT_pdb(filepath, samplename)
+        return avg_pLDDT
 
-def extract_pLDDT_pdb(filepath, samplename):
+def extract_pLDDT_pdb(filepath, samplename) -> float:
     '''
     Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file 
     '''
-    parser = PDB.PDBParser()
+#    with warnings.catch_warnings():
+    parser = PDB.PDBParser(QUIET=True)
+            #warnings.simplefilter('ignore', PDBConstructionWarning)
     structure = parser.get_structure(file=filepath, id=samplename)
   
     res_list = [] 
