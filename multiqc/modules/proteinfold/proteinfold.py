@@ -102,7 +102,7 @@ def extract_pLDDT_pdb(filepath, samplename):
     num_res = len(res_list)
     pLDDT_mean = (pLDDT_tot / num_res) 
    
-    if (pLDDT_mean < 1): # Should really check each program, but <1 pLDDTs are impossible, so let's just convert to percentage
+    if (pLDDT_mean < 1): # Should really check each program, but <1 pLDDTs are highlt improbable, so let's just convert to percentage
         pLDDT_mean *= 100
 
     return(round(pLDDT_mean,2))
