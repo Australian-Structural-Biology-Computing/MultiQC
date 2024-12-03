@@ -555,6 +555,6 @@ module_order:
   - xengsort
   - metaphlan
   - seqwho
-
+  - proteinfold 
 # Set to "false" to trade the `saved_raw_data` section in multiqc_data.json for memory
 preserve_module_raw_data: true

@@ -1021,6 +1021,9 @@ proteinfold/metrics:
   - fn: "result_model_*.pkl"
 # AlphaFold(3) server this is in 
   - fn: "_full_data_*.json"
-# For HelixFold3 these are in [job]/[job]-pred[1-5]-[1-5]/all_results.json
+# HelixFold3 these are in [job]/[job]-pred[1-5]-[1-5]/all_results.json
   - fn: "all_results.json"
+# RosettaFold-All-Atom this in [protein]_aux.pt. Need to read with PyTorch so nextflow might need open and dump to other file
+# Doesn't report iPTM. See metrics discussion here: https://github.com/baker-laboratory/RoseTTAFold-All-Atom/blob/6c8514053acf76da0f9edde2aa51b40abff68fa1/README.md?plain=1#L267-L281
+  - fn: "_aux.pt"
 

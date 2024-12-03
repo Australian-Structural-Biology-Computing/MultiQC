@@ -4,6 +4,8 @@ import re
 from multiqc.base_module import BaseMultiqcModule, ModuleNoSamplesFound
 from multiqc.plots import bargraph
 
+from Bio import PDB
+
 log = logging.getLogger(__name__)
 
 
@@ -29,8 +31,52 @@ class MultiqcModule(BaseMultiqcModule):
         super(MultiqcModule, self).__init__(
             name="ProteinFold",
             anchor="proteinfold",
-            href=["https://github.com/google-deepmind/alphafold", "https://github.com/sokrypton/ColabFold", "https://github.com/facebookresearch/esm", "https://github.com/baker-laboratory/RoseTTAFold-All-Atom", "https://github.com/PaddlePaddle/PaddleHelix/tree/dev/apps/protein_folding/helixfold3"],
+            href=["https://nf-co.re/proteinfold", "https://github.com/google-deepmind/alphafold", "https://github.com/sokrypton/ColabFold", "https://github.com/facebookresearch/esm", "https://github.com/baker-laboratory/RoseTTAFold-All-Atom", "https://github.com/PaddlePaddle/PaddleHelix/tree/dev/apps/protein_folding/helixfold3"],
             info="ProteinFold - protein structure inference methods through a single nextflow pipeline interface",
             doi=["10.1038/s41586-021-03819-2", "10.1038/s41592-022-01488-1",  "10.1126/science.ade2574", "10.1126/science.adl2528", "10.48550/arXiv.2408.16975"],
         )
+    
+        for f in self.find_log_files('proteinfold/structs'):
+            self.add_data_source(f, section='structs')        
+            #    print(f['f'])  # File contents
+            print(f['s_name'])  # Sample name (from cleaned filename)
+            print(f['fn'])  # Filename
+            print(f['root'])  # Directory file was in
 
+        self.general_stats_addcols(
+            data_by_sample,
+            {
+                "MSA depth": {
+                    "title": "Related Sequence Depth (MSAs)",
+                    "description": "The number of related sequences (across the whole protein) that could be retrieved from the MSA (Multiple Sequence Alignment) stage",
+                }, 
+                "Average Confidence": {
+                    "title": "Confidence (average plDDT)",
+                    "description": "Structure prediction confidence score across all residues in the protein - from the mean pLDDT (predicted Local Distance Difference Test) value",
+                    "max": 100,
+                    "min": 0,
+                    "scale": "RdYlGn",
+                },
+                "Interface score": {
+                    "title": "Interface accuracy (iPTM)",
+                    "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the iPTM (interface predicted Template Modelling) score",
+                    "max": 1,
+                    "min": 0,
+                    "scale": "Greens",
+                },
+            },
+        )
+
+
+    def parse_pdb_file(f) -> Dict[str, Union[float, int]]:
+        parser = PDB.PDBParser()
+        structure = parser.get_structure(f)
+        for model in structure:
+            num_res = len(get_residues(model))
+            plDDT_tot = 0
+            for chain in model:
+                for residue in chain:
+                    plDDT = residue.get_bfactor()
+            plDDT_mean = (plDDT_tot / num_res)
+
+        
