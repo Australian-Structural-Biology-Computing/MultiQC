@@ -42,6 +42,8 @@ class MultiqcModule(BaseMultiqcModule):
             samplename = f['s_name']
             pLDDT = self.parse_pdb_file(filepath, samplename)
             print(f"'file: {filepath} - confidence {pLDDT}")
+
+
   #     self.general_stats_addcols(
   #         data_by_sample,
   #         {
@@ -69,30 +71,39 @@ class MultiqcModule(BaseMultiqcModule):
 
     def parse_pdb_file(self, filepath, samplename):
         '''
-        Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file 
+        Extract any MultiQC relevant info from the PDB files. Currently gets pLDDT via a function
         '''
-        parser = PDB.PDBParser()
-        structure = parser.get_structure(file=filepath, id=samplename)
-        res_list = [] 
-        pLDDT_tot = 0
-        for model in structure:
-            for chain in model:
-                chain_res_list = chain.get_unpacked_list()
-                res_list.extend(chain_res_list)
-                for residue in chain:
-                    atom_list = residue.get_unpacked_list()
-                    num_atoms = len(atom_list)
-                    res_pLDDT_tot = 0
-                    for atom in residue: # ESMFold and others have separate atom-wise values 
-                        atom_pLDDT = atom.get_bfactor()
-                        res_pLDDT_tot += atom_pLDDT
-                    res_pLDDT = (res_pLDDT_tot / num_atoms)
-                    pLDDT_tot += res_pLDDT
-        num_res = len(res_list)
-        pLDDT_mean = (pLDDT_tot / num_res) 
-        # TO DO should really check each program, but <1 pLDDTs are impossible, so let's just convert to percentage
-        if (pLDDT_mean < 1):
-            pLDDT_mean *= 100
-        return(round(pLDDT_mean,2))
+        pLDDT = extract_pLDDT_pdb(filepath, samplename)
+        return pLDDT
 
-        
+def extract_pLDDT_pdb(filepath, samplename):
+    '''
+    Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file 
+    '''
+    parser = PDB.PDBParser()
+    structure = parser.get_structure(file=filepath, id=samplename)
+  
+    res_list = [] 
+    pLDDT_tot = 0
+
+    for model in structure:
+        for chain in model:
+            chain_res_list = chain.get_unpacked_list()
+            res_list.extend(chain_res_list)
+            for residue in chain:
+                atom_list = residue.get_unpacked_list()
+                num_atoms = len(atom_list)
+                res_pLDDT_tot = 0
+                for atom in residue: # ESMFold and others have separate atom-wise values 
+                    atom_pLDDT = atom.get_bfactor()
+                    res_pLDDT_tot += atom_pLDDT
+                res_pLDDT = (res_pLDDT_tot / num_atoms)
+                pLDDT_tot += res_pLDDT
+    num_res = len(res_list)
+    pLDDT_mean = (pLDDT_tot / num_res) 
+   
+    if (pLDDT_mean < 1): # Should really check each program, but <1 pLDDTs are impossible, so let's just convert to percentage
+        pLDDT_mean *= 100
+
+    return(round(pLDDT_mean,2))
+    
