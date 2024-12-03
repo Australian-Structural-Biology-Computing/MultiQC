@@ -38,45 +38,61 @@ class MultiqcModule(BaseMultiqcModule):
     
         for f in self.find_log_files('proteinfold/structs'):
             self.add_data_source(f, section='structs')        
-            #    print(f['f'])  # File contents
-            print(f['s_name'])  # Sample name (from cleaned filename)
-            print(f['fn'])  # Filename
-            print(f['root'])  # Directory file was in
+            filepath = f['root'] + '/' + f['fn']
+            samplename = f['s_name']
+            pLDDT = self.parse_pdb_file(filepath, samplename)
+            print(f"'file: {filepath} - confidence {pLDDT}")
+  #     self.general_stats_addcols(
+  #         data_by_sample,
+  #         {
+  #             "MSA depth": {
+  #                 "title": "Related Sequence Depth (MSAs)",
+  #                 "description": "The number of related sequences (across the whole protein) that could be retrieved from the MSA (Multiple Sequence Alignment) stage",
+  #             }, 
+  #             "Average Confidence": {
+  #                 "title": "Confidence (average plDDT)",
+  #                 "description": "Structure prediction confidence score across all residues in the protein - from the mean pLDDT (predicted Local Distance Difference Test) value",
+  #                 "max": 100,
+  #                 "min": 0,
+  #                 "scale": "RdYlGn",
+  #             },
+  #             "Interface score": {
+  #                 "title": "Interface accuracy (iPTM)",
+  #                 "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the iPTM (interface predicted Template Modelling) score",
+  #                 "max": 1,
+  #                 "min": 0,
+  #                 "scale": "Greens",
+  #             },
+  #         },
+  #     )
 
-        self.general_stats_addcols(
-            data_by_sample,
-            {
-                "MSA depth": {
-                    "title": "Related Sequence Depth (MSAs)",
-                    "description": "The number of related sequences (across the whole protein) that could be retrieved from the MSA (Multiple Sequence Alignment) stage",
-                }, 
-                "Average Confidence": {
-                    "title": "Confidence (average plDDT)",
-                    "description": "Structure prediction confidence score across all residues in the protein - from the mean pLDDT (predicted Local Distance Difference Test) value",
-                    "max": 100,
-                    "min": 0,
-                    "scale": "RdYlGn",
-                },
-                "Interface score": {
-                    "title": "Interface accuracy (iPTM)",
-                    "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the iPTM (interface predicted Template Modelling) score",
-                    "max": 1,
-                    "min": 0,
-                    "scale": "Greens",
-                },
-            },
-        )
 
-
-    def parse_pdb_file(f) -> Dict[str, Union[float, int]]:
+    def parse_pdb_file(self, filepath, samplename):
+        '''
+        Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file 
+        '''
         parser = PDB.PDBParser()
-        structure = parser.get_structure(f)
+        structure = parser.get_structure(file=filepath, id=samplename)
+        res_list = [] 
+        pLDDT_tot = 0
         for model in structure:
-            num_res = len(get_residues(model))
-            plDDT_tot = 0
             for chain in model:
+                chain_res_list = chain.get_unpacked_list()
+                res_list.extend(chain_res_list)
                 for residue in chain:
-                    plDDT = residue.get_bfactor()
-            plDDT_mean = (plDDT_tot / num_res)
+                    atom_list = residue.get_unpacked_list()
+                    num_atoms = len(atom_list)
+                    res_pLDDT_tot = 0
+                    for atom in residue: # ESMFold and others have separate atom-wise values 
+                        atom_pLDDT = atom.get_bfactor()
+                        res_pLDDT_tot += atom_pLDDT
+                    res_pLDDT = (res_pLDDT_tot / num_atoms)
+                    pLDDT_tot += res_pLDDT
+        num_res = len(res_list)
+        pLDDT_mean = (pLDDT_tot / num_res) 
+        # TO DO should really check each program, but <1 pLDDTs are impossible, so let's just convert to percentage
+        if (pLDDT_mean < 1):
+            pLDDT_mean *= 100
+        return(round(pLDDT_mean,2))
 
         
