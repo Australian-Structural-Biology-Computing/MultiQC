@@ -39,40 +39,40 @@ class MultiqcModule(BaseMultiqcModule):
         )
    
         self.proteinfold_data = {}
+        # I want to enable sample grouping: https://docs.seqera.io/multiqc/reports/customisation#sample-grouping
+
 
         for f in self.find_log_files('proteinfold/metrics'):
             self.add_data_source(f, section='metrics')        
-            filepath = f['root'] + '/' + f['fn']
-            samplename = f['s_name']
-            self.proteinfold_data[samplename] = {}
-            max_PAE, pTM, ipTM = self.parse_pickle_file(filepath, samplename)
-            print(max_PAE, pTM, ipTM)
-            self.proteinfold_data[samplename]['max_PAE'] = max_PAE 
-            self.proteinfold_data[samplename]['pTM'] = pTM 
-            self.proteinfold_data[samplename]['ipTM'] = ipTM 
+            max_PAE, pTM, ipTM = self.parse_pickle_file(f)
+            print(max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+            self.proteinfold_data[samplename] = {
+                'max_PAE' : max_PAE, 
+                'pTM' : pTM,
+                'ipTM' : ipTM 
+                'mean_pLDDT' : mean_pLDDT # mean pLDDT can be taken from .pkl, or pdb in absence of pickle. Here for 2nd check
+                'ranking_confidence' : ranking_confidence 
+            }
         
         for f in self.find_log_files('proteinfold/msas'):
             self.add_data_source(f, section='msas')
             filepath = f['root'] + '/' + f['fn']
             samplename = f['s_name']
-            self.proteinfold_data[samplename] = {}
             if f['fn'].endswith('.sto'):
                 aln = AlignIO.read(filepath, "stockholm")
                 msas = len(aln)
             if f['fn'].endswith('.a3m'):
                 num_lines = sum(1 for _ in open(filepath, 'rb'))
                 msas = int((num_lines/2)) # cheap hack but it holds and a3m parsing isn't support - A3MIO breaks of Bio.Alphabet
-            self.proteinfold_data[samplename]['msas'] = msas 
-        # Need to now nest these msa samples underneath the protein sample names     
+            self.proteinfold_data[samplename] = { 'msas' : msas }
+        # Now I need to nest these msa samples underneath the protein sample names     
  
-        # I can have this as "if pkl doesn't exist go for the PDB"
+        # I can have this as "if pkl above doesn't exist go for the PDB"
         for f in self.find_log_files('proteinfold/structs'):
             self.add_data_source(f, section='structs')        
-            filepath = f['root'] + '/' + f['fn']
-            samplename = f['s_name']
-            self.proteinfold_data[samplename] = {}
-            avg_pLDDT = self.parse_pdb_file(filepath, samplename)
-            self.proteinfold_data[samplename]['avg_pLDDT'] = avg_pLDDT
+            avg_pLDDT = self.parse_pdb_file(f)
+            self.proteinfold_data[samplename] = { ['avg_pLDDT'] : avg_pLDDT }
+            
         
             #print(self.proteinfold_data) # DEBUG
             #print(f"'file: {filepath} - confidence {avg_pLDDT}") # DEBUG
@@ -138,6 +138,8 @@ class MultiqcModule(BaseMultiqcModule):
         '''
         Extract any MultiQC relevant info from the PDB files. Currently gets pLDDT via a function
         '''
+        filepath = f['root'] + '/' + f['fn']
+        samplename = f['s_name']
         avg_pLDDT = extract_pLDDT_pdb(filepath, samplename)
         return avg_pLDDT
     
@@ -145,6 +147,8 @@ class MultiqcModule(BaseMultiqcModule):
         '''
         Extract metrics from .pkl files. Typically generated from AlphaFold2
         '''
+        filepath = f['root'] + '/' + f['fn']
+        samplename = f['s_name']
         with open(filepath, 'rb') as f:
             try:
                 pkl_obj = pickle.load(f)
@@ -153,8 +157,10 @@ class MultiqcModule(BaseMultiqcModule):
             max_PAE = pkl_obj['max_predicted_aligned_error']
             pTM = pkl_obj['ptm'] 
             ipTM = pkl_obj['iptm']      
+            mean_pLDDT = float(round(pkl_obj['plddt'].mean(),2))      
+            mean_pLDDT = float(round(pkl_obj['ranking_confidence'],2))      
         
-        return(max_PAE, pTM, ipTM)
+        return(max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
     
 def extract_pLDDT_pdb(filepath, samplename) -> float:
     '''
