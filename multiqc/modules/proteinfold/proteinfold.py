@@ -1,12 +1,13 @@
 import logging
 import re
 import warnings
+import pickle
 
 from multiqc.base_module import BaseMultiqcModule, ModuleNoSamplesFound
 from multiqc.plots import bargraph
 
 from Bio import PDB
-#from Bio import PDBConstructionWarning # supress non-standard PDB file warnings
+from Bio import AlignIO
 
 log = logging.getLogger(__name__)
 
@@ -21,11 +22,10 @@ class MultiqcModule(BaseMultiqcModule):
         - [RoseTTaFold-All-Atom](https://github.com/baker-laboratory/RoseTTAFold-All-Atom)
         - [HelixFold3](https://github.com/PaddlePaddle/PaddleHelix/tree/dev/apps/protein_folding/helixfold3) 
 
-    This is intended to provide a summary of useful metrics for mass 'folding' a large set of proteins, either in terms of finishing for mulitmer interactions or comparing methods across whole proteomes. It provides a visual 'at-a-glance' report of relevant metrics (average pLDDT, iPTM, *etc*) and does not replace the per-protein interactive plot generated from nfcore/proteinfold
+    This is intended to provide a summary of useful metrics for mass 'folding' a large set of proteins, either in terms of finishing for mulitmer interactions or comparing methods across whole proteomes. It provides a visual 'at-a-glance' report of relevant metrics (average pLDDT, ipTM, *etc*) and does not replace the per-protein interactive plot generated from nfcore/proteinfold
 
     ```
     Here's what some raw code looks like
-    ```
 
     """
 
@@ -39,7 +39,33 @@ class MultiqcModule(BaseMultiqcModule):
         )
    
         self.proteinfold_data = {}
+
+        for f in self.find_log_files('proteinfold/metrics'):
+            self.add_data_source(f, section='metrics')        
+            filepath = f['root'] + '/' + f['fn']
+            samplename = f['s_name']
+            self.proteinfold_data[samplename] = {}
+            max_PAE, pTM, ipTM = self.parse_pickle_file(filepath, samplename)
+            print(max_PAE, pTM, ipTM)
+            self.proteinfold_data[samplename]['max_PAE'] = max_PAE 
+            self.proteinfold_data[samplename]['pTM'] = pTM 
+            self.proteinfold_data[samplename]['ipTM'] = ipTM 
         
+        for f in self.find_log_files('proteinfold/msas'):
+            self.add_data_source(f, section='msas')
+            filepath = f['root'] + '/' + f['fn']
+            samplename = f['s_name']
+            self.proteinfold_data[samplename] = {}
+            if f['fn'].endswith('.sto'):
+                aln = AlignIO.read(filepath, "stockholm")
+                msas = len(aln)
+            if f['fn'].endswith('.a3m'):
+                num_lines = sum(1 for _ in open(filepath, 'rb'))
+                msas = int((num_lines/2)) # cheap hack but it holds and a3m parsing isn't support - A3MIO breaks of Bio.Alphabet
+            self.proteinfold_data[samplename]['msas'] = msas 
+        # Need to now nest these msa samples underneath the protein sample names     
+ 
+        # I can have this as "if pkl doesn't exist go for the PDB"
         for f in self.find_log_files('proteinfold/structs'):
             self.add_data_source(f, section='structs')        
             filepath = f['root'] + '/' + f['fn']
@@ -47,10 +73,11 @@ class MultiqcModule(BaseMultiqcModule):
             self.proteinfold_data[samplename] = {}
             avg_pLDDT = self.parse_pdb_file(filepath, samplename)
             self.proteinfold_data[samplename]['avg_pLDDT'] = avg_pLDDT
+        
             #print(self.proteinfold_data) # DEBUG
             #print(f"'file: {filepath} - confidence {avg_pLDDT}") # DEBUG
 
-        self.write_data_file(self.proteinfold_data, "proteinfold_avg_pLDDT", sort_cols=True) # I want tp structure and rename from avg_plDDT to summary_stats
+        self.write_data_file(self.proteinfold_data, "proteinfold_data") # I want to structure and rename from avg_plDDT to summary_stats
         self.general_stats_table()
     
 
@@ -68,6 +95,7 @@ class MultiqcModule(BaseMultiqcModule):
                 "description": "Structure prediction confidence score across all residues in the protein - from the mean pLDDT (predicted Local Distance Difference Test) value",
                 "max": 100,
                 "min": 0,
+                "bars_zero_centrepoint": True,
                 "cond_formatting_rules": {
                     "very-low": [ {"lt": 50}],
                     "low": [ {"gt": 50}, {"lt": 70}],
@@ -81,35 +109,29 @@ class MultiqcModule(BaseMultiqcModule):
                     {"very-high": "#014ecc"}
                 ]
             },
-#           "Interface score": {
-#               "title": "Interface accuracy (iPTM)",
-#               "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the iPTM (interface predicted Template Modelling) score",
-#               "max": 1,
-#               "min": 0,
-#               "scale": "Greens",
-#               },
+           "max_PAE": {
+               "title": "Max error in relative positioning (PAE)",
+               "description": "The maximum confidence in the relatively positioning between different domains - examine to validate pausible interactions - from the PAE (Predicted Align Error) score",
+               "max": 30,
+               "min": 0,
+               "scale": "Greens",
+           },
+           "pTM": {
+               "title": "Global accuracy (TM)",
+               "description": "Global accuracy of the protein folded, less sensitive to localised inaccuracies than raw 3D atomic deviations (RMSD) - from the pTM (predicted Template Modelling) score",
+               "max": 1,
+               "min": 0,
+               "scale": "Greys",
+           },
+           "ipTM": {
+               "title": "Interface accuracy (ipTM)",
+               "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the ipTM (interface predicted Template Modelling) score",
+               "max": 1,
+               "min": 0,
+               "scale": "Purples",
+               },
         }
         self.general_stats_addcols(self.proteinfold_data, headers)
-
-## I want to modify this to so that model_1, model_2 group. It seems to do so anyway 
-#   self.general_stats_addcols(
-#       ...,
-#       group_samples_config=SampleGroupingConfig(
-#           cols_to_sum=[ColumnKeyT("total_sequences")],
-#           cols_to_weighted_average=[
-#               (ColumnKeyT("percent_gc"), ColumnKeyT("total_sequences")),
-#               (ColumnKeyT("avg_sequence_length"), ColumnKeyT("total_sequences")),
-#               (ColumnKeyT("percent_duplicates"), ColumnKeyT("total_sequences")),
-#               (ColumnKeyT("median_sequence_length"), ColumnKeyT("total_sequences")),
-#           ],
-#           extra_functions=[_summarize_statues],
-#       )
-#   )
-  #    self.general_stats_addcols(
-  #        data_by_sample,
-  #        {
-  #        },
-  #    )
 
 
     def parse_pdb_file(self, filepath, samplename):
@@ -118,7 +140,22 @@ class MultiqcModule(BaseMultiqcModule):
         '''
         avg_pLDDT = extract_pLDDT_pdb(filepath, samplename)
         return avg_pLDDT
-
+    
+    def parse_pickle_file(self, filepath, samplename):
+        '''
+        Extract metrics from .pkl files. Typically generated from AlphaFold2
+        '''
+        with open(filepath, 'rb') as f:
+            try:
+                pkl_obj = pickle.load(f)
+            except pickle.UnpicklingError: 
+                return(None, None, None)
+            max_PAE = pkl_obj['max_predicted_aligned_error']
+            pTM = pkl_obj['ptm'] 
+            ipTM = pkl_obj['iptm']      
+        
+        return(max_PAE, pTM, ipTM)
+    
 def extract_pLDDT_pdb(filepath, samplename) -> float:
     '''
     Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file 
@@ -151,4 +188,5 @@ def extract_pLDDT_pdb(filepath, samplename) -> float:
         pLDDT_mean *= 100
 
     return(round(pLDDT_mean,2))
-    
+
+      
