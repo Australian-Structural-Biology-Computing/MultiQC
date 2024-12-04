@@ -51,9 +51,9 @@ class MultiqcModule(BaseMultiqcModule):
             self.add_data_source(f, section='metrics')   
             if f['fn'].endswith('.pkl'): # might need and AF2 check     
                 PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
-            print(f['fn'])
+            #print(f['fn'])
             if f['fn'] == 'all_features.json': # HF3    
-                print("all_features found!") 
+            #    print("all_features found!") 
                 PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
             #print(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
             self.proteinfold_data[samplename] = {
@@ -188,7 +188,7 @@ class MultiqcModule(BaseMultiqcModule):
         return(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
             
 
-     
+# Use this if there's no metric summary file available (.pkl, .json)    
 def extract_pLDDT_pdb(filepath, samplename) -> float:
     '''
     Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file 
