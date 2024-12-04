@@ -49,8 +49,8 @@ class MultiqcModule(BaseMultiqcModule):
             self.proteinfold_data[samplename] = {
                 'max_PAE' : max_PAE, 
                 'pTM' : pTM,
-                'ipTM' : ipTM 
-                'mean_pLDDT' : mean_pLDDT # mean pLDDT can be taken from .pkl, or pdb in absence of pickle. Here for 2nd check
+                'ipTM' : ipTM, 
+                'mean_pLDDT' : mean_pLDDT, # mean pLDDT can be taken from .pkl, or pdb in absence of pickle. Here for 2nd check
                 'ranking_confidence' : ranking_confidence 
             }
         
