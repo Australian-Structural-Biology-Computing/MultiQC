@@ -2,6 +2,7 @@ import logging
 import re
 import warnings
 import pickle
+import json
 
 from multiqc.base_module import BaseMultiqcModule, ModuleNoSamplesFound
 from multiqc.plots import bargraph
@@ -41,13 +42,20 @@ class MultiqcModule(BaseMultiqcModule):
         self.proteinfold_data = {}
         # I want to enable sample grouping: https://docs.seqera.io/multiqc/reports/customisation#sample-grouping
 
-
+        # AF2 has .pkl
+        # HF3 has final_features.pkl look in pkl_obj['feat'].keys() you get IDs but not values
+        # HF3 has all_results.json
+        
+        # RFAA has an aux.pt pytorch file. We're going to need a subworkflow to spit it out
         for f in self.find_log_files('proteinfold/metrics'):
-            self.add_data_source(f, section='metrics')        
-            max_PAE, pTM, ipTM = self.parse_pickle_file(f)
-            print(max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+            self.add_data_source(f, section='metrics')   
+            if f['fn'].endswith('.pkl'): # might need and AF2 check     
+                PAE, pTM, ipTM = self.parse_pickle_file(f)
+            if f['fn'] = 'all_features.json'): # HF3     
+                PAE, pTM, ipTM = self.parse_json_file(f)
+            print(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
             self.proteinfold_data[samplename] = {
-                'max_PAE' : max_PAE, 
+                'PAE' : PAE, 
                 'pTM' : pTM,
                 'ipTM' : ipTM, 
                 'mean_pLDDT' : mean_pLDDT, # mean pLDDT can be taken from .pkl, or pdb in absence of pickle. Here for 2nd check
@@ -109,8 +117,8 @@ class MultiqcModule(BaseMultiqcModule):
                     {"very-high": "#014ecc"}
                 ]
             },
-           "max_PAE": {
-               "title": "Max error in relative positioning (PAE)",
+           "PAE": {
+               "title": "Error in relative residue-residue positioning (PAE)",
                "description": "The maximum confidence in the relatively positioning between different domains - examine to validate pausible interactions - from the PAE (Predicted Align Error) score",
                "max": 30,
                "min": 0,
@@ -134,7 +142,7 @@ class MultiqcModule(BaseMultiqcModule):
         self.general_stats_addcols(self.proteinfold_data, headers)
 
 
-    def parse_pdb_file(self, filepath, samplename):
+    def parse_pdb_file(self, f):
         '''
         Extract any MultiQC relevant info from the PDB files. Currently gets pLDDT via a function
         '''
@@ -143,7 +151,7 @@ class MultiqcModule(BaseMultiqcModule):
         avg_pLDDT = extract_pLDDT_pdb(filepath, samplename)
         return avg_pLDDT
     
-    def parse_pickle_file(self, filepath, samplename):
+    def parse_pickle_file(self, f):
         '''
         Extract metrics from .pkl files. Typically generated from AlphaFold2
         '''
@@ -154,14 +162,32 @@ class MultiqcModule(BaseMultiqcModule):
                 pkl_obj = pickle.load(f)
             except pickle.UnpicklingError: 
                 return(None, None, None)
-            max_PAE = pkl_obj['max_predicted_aligned_error']
+            PAE = pkl_obj['max_predicted_aligned_error']
             pTM = pkl_obj['ptm'] 
             ipTM = pkl_obj['iptm']      
             mean_pLDDT = float(round(pkl_obj['plddt'].mean(),2))      
-            mean_pLDDT = float(round(pkl_obj['ranking_confidence'],2))      
+            ranking_confidence = float(round(pkl_obj['ranking_confidence'],2))      
         
-        return(max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+        return(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
     
+    def parse_json_file(self, f):
+        '''
+        Extract metrics from .json files. Typically generated from HelixFold3 
+        '''
+        filepath = f['root'] + '/' + f['fn']
+        samplename = f['s_name']
+        with open(filepath, 'rb') as f:
+            json_obj = json.load(f)
+            PAE = json_obj['pae']
+            pTM = round(json_obj['ptm'],2)
+            ipTM = round(json_obj['iptm'],2)
+            mean_pLDDT = round(json_obj['mean_plddt'],2)      
+            ranking_confidence = float(round(json_obj['ranking_confidence'],2))      
+        
+    return(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+            
+
+     
 def extract_pLDDT_pdb(filepath, samplename) -> float:
     '''
     Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file 
