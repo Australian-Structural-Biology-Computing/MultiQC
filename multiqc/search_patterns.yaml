@@ -1002,28 +1002,31 @@ xenome:
 xengsort:
   contents: "# Xengsort classify"
   num_lines: 2
+proteinfold/metrics:  
+  fn: "result_model_*_pred_*.pkl"
+roteinfold/structs:
+  fn: "*.pdb" 
 proteinfold/msas:  
+  - fn: "*.a3m"
+  - fn: "*.sto"
+# More specific to AlphaFold program
+# - fn: "bfd_uniref_hits.a3m"
+# - fn: "small_bfd_hits.a3m"
+# - fn: "mgnify_hits.sto"
+# - fn: "pdb_hits.sto"
+# - fn: "unirprot_hits.sto"
+# - fn: "uniref90_hits.sto"
 # AlphaFold2 this is in [job]/msas/[chain]
 # HelixFold3 this is in [job]/msas/protein_[A,B,C..]/[chain] 
-  - fn: "bfd_uniref_hits.a3m"
-  - fn: "small_bfd_hits.a3m"
-  - fn: "mgnify_hits.sto"
-  - fn: "pdb_hits.sto"
-  - fn: "unirprot_hits.sto"
-  - fn: "uniref90_hits.sto"
 # RosettaFold-All-Atom this in [protein]/[chain]/hhblits/
-  - fn: ".*a3m"
-proteinfold/structs:
-  fn: "*.pdb" 
-proteinfold/metrics:  
 # ESMFold, go straight to pdb since no MSAs or .pkl 
-# AlphaFold2 output. Alternatively can go to pae_model_[1-5]_multimer*.json and confidence_model_*.json
-  - fn: "result_model_*.pkl"
+# AlphaFold2 output. Alternatively can go to pae_model_[1-5]_multimer*.json and confidence_model_*.json  something about result_model_*_multimer_*_pred_.pkl 
+  #- fn: 
 # AlphaFold(3) server this is in 
-  - fn: "_full_data_*.json"
+  #- fn: "_full_data_*.json"
 # HelixFold3 these are in [job]/[job]-pred[1-5]-[1-5]/all_results.json
-  - fn: "all_results.json"
+  #- fn: "all_results.json"
 # RosettaFold-All-Atom this in [protein]_aux.pt. Need to read with PyTorch so nextflow might need open and dump to other file
 # Doesn't report iPTM. See metrics discussion here: https://github.com/baker-laboratory/RoseTTAFold-All-Atom/blob/6c8514053acf76da0f9edde2aa51b40abff68fa1/README.md?plain=1#L267-L281
-  - fn: "_aux.pt"
+  #- fn: "_aux.pt"
 
