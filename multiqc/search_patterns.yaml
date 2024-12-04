@@ -1003,19 +1003,17 @@ xengsort:
   contents: "# Xengsort classify"
   num_lines: 2
 proteinfold/metrics:  
-  fn: "result_model_*_pred_*.pkl"
+ - fn: "result_model_*_pred_*.pkl"
+ - fn: "all_results.json"
 roteinfold/structs:
   fn: "*.pdb" 
 proteinfold/msas:  
-  - fn: "*.a3m"
-  - fn: "*.sto"
-# More specific to AlphaFold program
-# - fn: "bfd_uniref_hits.a3m"
-# - fn: "small_bfd_hits.a3m"
-# - fn: "mgnify_hits.sto"
-# - fn: "pdb_hits.sto"
-# - fn: "unirprot_hits.sto"
-# - fn: "uniref90_hits.sto"
+ - fn: "bfd_uniref_hits.a3m"
+ - fn: "small_bfd_hits.a3m"
+ - fn: "mgnify_hits.sto"
+ - fn: "pdb_hits.sto"
+ - fn: "uniprot_hits.sto"
+ - fn: "uniref90_hits.sto"
 # AlphaFold2 this is in [job]/msas/[chain]
 # HelixFold3 this is in [job]/msas/protein_[A,B,C..]/[chain] 
 # RosettaFold-All-Atom this in [protein]/[chain]/hhblits/

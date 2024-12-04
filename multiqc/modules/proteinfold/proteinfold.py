@@ -50,10 +50,12 @@ class MultiqcModule(BaseMultiqcModule):
         for f in self.find_log_files('proteinfold/metrics'):
             self.add_data_source(f, section='metrics')   
             if f['fn'].endswith('.pkl'): # might need and AF2 check     
-                PAE, pTM, ipTM = self.parse_pickle_file(f)
-            if f['fn'] = 'all_features.json'): # HF3     
-                PAE, pTM, ipTM = self.parse_json_file(f)
-            print(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+                PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
+            print(f['fn'])
+            if f['fn'] == 'all_features.json': # HF3    
+                print("all_features found!") 
+                PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
+            #print(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
             self.proteinfold_data[samplename] = {
                 'PAE' : PAE, 
                 'pTM' : pTM,
@@ -175,7 +177,6 @@ class MultiqcModule(BaseMultiqcModule):
         Extract metrics from .json files. Typically generated from HelixFold3 
         '''
         filepath = f['root'] + '/' + f['fn']
-        samplename = f['s_name']
         with open(filepath, 'rb') as f:
             json_obj = json.load(f)
             PAE = json_obj['pae']
@@ -184,7 +185,7 @@ class MultiqcModule(BaseMultiqcModule):
             mean_pLDDT = round(json_obj['mean_plddt'],2)      
             ranking_confidence = float(round(json_obj['ranking_confidence'],2))      
         
-    return(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+        return(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
             
 
      
