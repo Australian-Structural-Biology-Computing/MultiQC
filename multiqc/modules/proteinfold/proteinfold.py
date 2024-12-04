@@ -45,9 +45,8 @@ class MultiqcModule(BaseMultiqcModule):
         # AF2 has .pkl
         # HF3 has final_features.pkl look in pkl_obj['feat'].keys() you get IDs but not values
         # HF3 has all_results.json
-        
-        # RFAA has an aux.pt pytorch file. We're going to need a subworkflow to spit it out
-        for f in self.find_log_files('proteinfold/metrics'):
+
+        for f in self.find_log_files('proteinfold/metrics'): # need to set log_filesize_limit to 4GB in ./multiqc/config_defaults.yaml. It's slow so should preferentially use json
             self.add_data_source(f, section='metrics')   
             if f['fn'].endswith('.pkl'): # might need and AF2 check     
                 PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
@@ -55,7 +54,7 @@ class MultiqcModule(BaseMultiqcModule):
             if f['fn'] == 'all_features.json': # HF3    
             #    print("all_features found!") 
                 PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
-            #print(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+            print(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
             self.proteinfold_data[samplename] = {
                 'PAE' : PAE, 
                 'pTM' : pTM,
@@ -79,9 +78,10 @@ class MultiqcModule(BaseMultiqcModule):
  
         # I can have this as "if pkl above doesn't exist go for the PDB"
         for f in self.find_log_files('proteinfold/structs'):
+            samplename = f['s_name']
             self.add_data_source(f, section='structs')        
             avg_pLDDT = self.parse_pdb_file(f)
-            self.proteinfold_data[samplename] = { ['avg_pLDDT'] : avg_pLDDT }
+            self.proteinfold_data[samplename] = { 'avg_pLDDT' : avg_pLDDT }
             
         
             #print(self.proteinfold_data) # DEBUG
