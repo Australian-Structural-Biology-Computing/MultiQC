@@ -48,15 +48,17 @@ class MultiqcModule(BaseMultiqcModule):
 
         for f in self.find_log_files('proteinfold/metrics'): # need to set log_filesize_limit to 4GB in ./multiqc/config_defaults.yaml. It's slow so should preferentially use json
             self.add_data_source(f, section='metrics')   
+            samplename = f['s_name']
+
+            #should be: If AF2 read confidence_model and pae_model, and .pkl to find pTM and iPTM 
             if f['fn'].endswith('.pkl'): # might need and AF2 check     
-                PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
-            #print(f['fn'])
+                max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
             if f['fn'] == 'all_features.json': # HF3    
-            #    print("all_features found!") 
-                PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
-            print(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+                max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
+            # TO DO for boltz need to read npz
+            print(f"max_PAE: {max_PAE}, pTM: {pTM}, ipTM: {ipTM}, mean_pLDDT: {mean_pLDDT}, ranking_confidence: {ranking_confidence}")
             self.proteinfold_data[samplename] = {
-                'PAE' : PAE, 
+                'max_PAE' : max_PAE,  # probably not useful, you'll always have something with a high PAE. Will look at heatmap and other plots 
                 'pTM' : pTM,
                 'ipTM' : ipTM, 
                 'mean_pLDDT' : mean_pLDDT, # mean pLDDT can be taken from .pkl, or pdb in absence of pickle. Here for 2nd check
@@ -80,12 +82,12 @@ class MultiqcModule(BaseMultiqcModule):
         for f in self.find_log_files('proteinfold/structs'):
             samplename = f['s_name']
             self.add_data_source(f, section='structs')        
-            avg_pLDDT = self.parse_pdb_file(f)
-            self.proteinfold_data[samplename] = { 'avg_pLDDT' : avg_pLDDT }
+            mean_pLDDT = self.parse_pdb_file(f)
+            self.proteinfold_data[samplename] = { 'mean_pLDDT' : mean_pLDDT }
             
         
             #print(self.proteinfold_data) # DEBUG
-            #print(f"'file: {filepath} - confidence {avg_pLDDT}") # DEBUG
+            #print(f"'file: {filepath} - confidence {mean_pLDDT}") # DEBUG
 
         self.write_data_file(self.proteinfold_data, "proteinfold_data") # I want to structure and rename from avg_plDDT to summary_stats
         self.general_stats_table()
@@ -96,50 +98,56 @@ class MultiqcModule(BaseMultiqcModule):
         Put protein structure prediction metrics into a general table for all different Deep Learning methods
         '''
         headers = {
-#           "MSA depth": {
-#               "title": "Related Sequence Depth (MSAs)",
-#               "description": "The number of related sequences (across the whole protein) that could be retrieved from the MSA (Multiple Sequence Alignment) stage",
-#           }, 
-            "avg_pLDDT": {
+            "msas": {
+                "title": "Related Sequence Depth (MSAs)",
+                "description": "The number of related sequences (across the whole protein) that could be retrieved from the MSA (Multiple Sequence Alignment) stage",
+            }, 
+            "mean_pLDDT": {
                 "title": "Confidence (average plDDT)",
                 "description": "Structure prediction confidence score across all residues in the protein - from the mean pLDDT (predicted Local Distance Difference Test) value",
                 "max": 100,
                 "min": 0,
-                "bars_zero_centrepoint": True,
                 "cond_formatting_rules": {
-                    "very-low": [ {"lt": 50}],
-                    "low": [ {"gt": 50}, {"lt": 70}],
-                    "high": [ {"gt": 70}, {"lt": 90}],
-                    "very-high": [ {"gt": 90}]
+                    "very-low": [{"lt": 50}],
+                    "low": [{"gt": 50}, {"lt": 70}],
+                    "high": [{"gt": 70}, {"lt": 90}],
+                    "very-high": [{"gt": 90}],
                 },
                 "cond_formatting_colours": [
                     {"very-low": "#f0743e"},
                     {"low": "#f9d613"},
                     {"high": "#60c2e8"},
-                    {"very-high": "#014ecc"}
+                    {"very-high": "#014ecc"},
                 ]
             },
-           "PAE": {
-               "title": "Error in relative residue-residue positioning (PAE)",
+           "max_PAE": {
+               "title": "Max error in relative residue-residue positioning (PAE)",
                "description": "The maximum confidence in the relatively positioning between different domains - examine to validate pausible interactions - from the PAE (Predicted Align Error) score",
-               "max": 30,
+               "max": 31.75,
                "min": 0,
-               "scale": "Greens",
-           },
+               "scale": "Greens-rev",
+            },
            "pTM": {
                "title": "Global accuracy (TM)",
                "description": "Global accuracy of the protein folded, less sensitive to localised inaccuracies than raw 3D atomic deviations (RMSD) - from the pTM (predicted Template Modelling) score",
                "max": 1,
                "min": 0,
-               "scale": "Greys",
-           },
+               "scale": "Blues",
+            },
            "ipTM": {
                "title": "Interface accuracy (ipTM)",
                "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the ipTM (interface predicted Template Modelling) score",
                "max": 1,
                "min": 0,
                "scale": "Purples",
-               },
+            },
+           "ranking_confidence": {
+               "title": "Ranking order confidence",
+               "description": "A combination of varuous metrics that determine the order in which separate structure prediction models are ranked and  returned",
+               "max": 1,
+               "min": 0,
+               "scale": "Greys",
+            },
         }
         self.general_stats_addcols(self.proteinfold_data, headers)
 
@@ -150,8 +158,8 @@ class MultiqcModule(BaseMultiqcModule):
         '''
         filepath = f['root'] + '/' + f['fn']
         samplename = f['s_name']
-        avg_pLDDT = extract_pLDDT_pdb(filepath, samplename)
-        return avg_pLDDT
+        mean_pLDDT = extract_pLDDT_pdb(filepath, samplename)
+        return mean_pLDDT
     
     def parse_pickle_file(self, f):
         '''
@@ -164,13 +172,13 @@ class MultiqcModule(BaseMultiqcModule):
                 pkl_obj = pickle.load(f)
             except pickle.UnpicklingError: 
                 return(None, None, None)
-            PAE = pkl_obj['max_predicted_aligned_error']
-            pTM = pkl_obj['ptm'] 
-            ipTM = pkl_obj['iptm']      
-            mean_pLDDT = float(round(pkl_obj['plddt'].mean(),2))      
-            ranking_confidence = float(round(pkl_obj['ranking_confidence'],2))      
+            max_PAE = round(float(pkl_obj['max_predicted_aligned_error']),2)
+            pTM = round(float(pkl_obj['ptm']),2) 
+            ipTM = round(float(pkl_obj['iptm']),2)      
+            mean_pLDDT = round(float(pkl_obj['plddt'].mean()),2)      
+            ranking_confidence = round(float(pkl_obj['ranking_confidence']),2)      
         
-        return(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+        return(max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
     
     def parse_json_file(self, f):
         '''
@@ -179,13 +187,13 @@ class MultiqcModule(BaseMultiqcModule):
         filepath = f['root'] + '/' + f['fn']
         with open(filepath, 'rb') as f:
             json_obj = json.load(f)
-            PAE = json_obj['pae']
+            max_PAE = round(json_obj['pae'],2)
             pTM = round(json_obj['ptm'],2)
             ipTM = round(json_obj['iptm'],2)
             mean_pLDDT = round(json_obj['mean_plddt'],2)      
             ranking_confidence = float(round(json_obj['ranking_confidence'],2))      
         
-        return(PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+        return(max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
             
 
 # Use this if there's no metric summary file available (.pkl, .json)    
