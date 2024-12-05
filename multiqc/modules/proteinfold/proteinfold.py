@@ -12,11 +12,11 @@ from Bio import AlignIO
 
 log = logging.getLogger(__name__)
 
-#### TO DO 
+#### TO DO
 #
-# - ESMFold - DONE - just produces a .pdb so parse_pdb_file() suffices  
+# - ESMFold - DONE - just produces a .pdb so parse_pdb_file() suffices
 # - AlphaFold2 -
-# - AlphaFold3 - could be just an mmCIF  
+# - AlphaFold3 - could be just an mmCIF
 #
 #
 #
@@ -31,7 +31,7 @@ class MultiqcModule(BaseMultiqcModule):
         - [ColabFold](https://github.com/sokrypton/ColabFold) [currently not being worked on]
         - [ESMFold](https://github.com/facebookresearch/esm)
         - [RoseTTaFold-All-Atom](https://github.com/baker-laboratory/RoseTTAFold-All-Atom)
-        - [HelixFold3](https://github.com/PaddlePaddle/PaddleHelix/tree/dev/apps/protein_folding/helixfold3) 
+        - [HelixFold3](https://github.com/PaddlePaddle/PaddleHelix/tree/dev/apps/protein_folding/helixfold3)
 
     This is intended to provide a summary of useful metrics for mass 'folding' a large set of proteins, either in terms of finishing for mulitmer interactions or comparing methods across whole proteomes. It provides a visual 'at-a-glance' report of relevant metrics (average pLDDT, ipTM, *etc*) and does not replace the per-protein interactive plot generated from nfcore/proteinfold
 
@@ -44,11 +44,24 @@ class MultiqcModule(BaseMultiqcModule):
         super(MultiqcModule, self).__init__(
             name="ProteinFold",
             anchor="proteinfold",
-            href=["https://nf-co.re/proteinfold", "https://github.com/google-deepmind/alphafold", "https://github.com/sokrypton/ColabFold", "https://github.com/facebookresearch/esm", "https://github.com/baker-laboratory/RoseTTAFold-All-Atom", "https://github.com/PaddlePaddle/PaddleHelix/tree/dev/apps/protein_folding/helixfold3"],
+            href=[
+                "https://nf-co.re/proteinfold",
+                "https://github.com/google-deepmind/alphafold",
+                "https://github.com/sokrypton/ColabFold",
+                "https://github.com/facebookresearch/esm",
+                "https://github.com/baker-laboratory/RoseTTAFold-All-Atom",
+                "https://github.com/PaddlePaddle/PaddleHelix/tree/dev/apps/protein_folding/helixfold3",
+            ],
             info="ProteinFold - protein structure inference methods through a single nextflow pipeline interface",
-            doi=["10.1038/s41586-021-03819-2", "10.1038/s41592-022-01488-1",  "10.1126/science.ade2574", "10.1126/science.adl2528", "10.48550/arXiv.2408.16975"],
+            doi=[
+                "10.1038/s41586-021-03819-2",
+                "10.1038/s41592-022-01488-1",
+                "10.1126/science.ade2574",
+                "10.1126/science.adl2528",
+                "10.48550/arXiv.2408.16975",
+            ],
         )
-   
+
         self.proteinfold_data = {}
         # I want to enable sample grouping: https://docs.seqera.io/multiqc/reports/customisation#sample-grouping
 
@@ -56,62 +69,68 @@ class MultiqcModule(BaseMultiqcModule):
         # HF3 has final_features.pkl look in pkl_obj['feat'].keys() you get IDs but not values
         # HF3 has all_results.json
 
-        for f in self.find_log_files('proteinfold/metrics'): # need to set log_filesize_limit to 4GB in ./multiqc/config_defaults.yaml. It's slow so should preferentially use json
-            self.add_data_source(f, section='metrics')   
-            samplename = f['s_name']
+        for f in self.find_log_files(
+            "proteinfold/metrics"
+        ):  # need to set log_filesize_limit to 4GB in ./multiqc/config_defaults.yaml. It's slow so should preferentially use json
+            self.add_data_source(f, section="metrics")
+            samplename = f["s_name"]
 
-            #should be: If AF2 read confidence_model and pae_model, and .pkl to find pTM and iPTM 
-            if f['fn'].endswith('.pkl'): # might need and AF2 check     
+            # should be: If AF2 read confidence_model and pae_model, and .pkl to find pTM and iPTM
+            if f["fn"].endswith(".pkl"):  # might need and AF2 check
                 max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
-            if f['fn'] == 'all_features.json': # HF3    
+            if f["fn"] == "all_features.json":  # HF3
                 max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
             # TO DO for boltz need to read npz
-            print(f"max_PAE: {max_PAE}, pTM: {pTM}, ipTM: {ipTM}, mean_pLDDT: {mean_pLDDT}, ranking_confidence: {ranking_confidence}")
+            print(
+                f"max_PAE: {max_PAE}, pTM: {pTM}, ipTM: {ipTM}, mean_pLDDT: {mean_pLDDT}, ranking_confidence: {ranking_confidence}"
+            )
             self.proteinfold_data[samplename] = {
-                'max_PAE' : max_PAE,  # probably not useful, you'll always have something with a high PAE. Will look at heatmap and other plots 
-                'pTM' : pTM,
-                'ipTM' : ipTM, 
-                'mean_pLDDT' : mean_pLDDT, # mean pLDDT can be taken from .pkl, or pdb in absence of pickle. Here for 2nd check
-                'ranking_confidence' : ranking_confidence 
+                "max_PAE": max_PAE,  # probably not useful, you'll always have something with a high PAE. Will look at heatmap and other plots
+                "pTM": pTM,
+                "ipTM": ipTM,
+                "mean_pLDDT": mean_pLDDT,  # mean pLDDT can be taken from .pkl, or pdb in absence of pickle. Here for 2nd check
+                "ranking_confidence": ranking_confidence,
             }
-        
-        for f in self.find_log_files('proteinfold/msas'):
-            self.add_data_source(f, section='msas')
-            filepath = f['root'] + '/' + f['fn']
-            samplename = f['s_name']
-            if f['fn'].endswith('.sto'):
+
+        for f in self.find_log_files("proteinfold/msas"):
+            self.add_data_source(f, section="msas")
+            filepath = f["root"] + "/" + f["fn"]
+            samplename = f["s_name"]
+            if f["fn"].endswith(".sto"):
                 aln = AlignIO.read(filepath, "stockholm")
                 msas = len(aln)
-            if f['fn'].endswith('.a3m'):
-                num_lines = sum(1 for _ in open(filepath, 'rb'))
-                msas = int((num_lines/2)) # cheap hack but it holds and a3m parsing isn't support - A3MIO breaks of Bio.Alphabet
-            self.proteinfold_data[samplename] = { 'msas' : msas }
-        # Now I need to nest these msa samples underneath the protein sample names     
- 
-        # I can have this as "if pkl above doesn't exist go for the PDB"
-        for f in self.find_log_files('proteinfold/structs'):
-            samplename = f['s_name']
-            self.add_data_source(f, section='structs')        
-            mean_pLDDT = self.parse_pdb_or_mmcif_file(f)
-            self.proteinfold_data[samplename] = { 'mean_pLDDT' : mean_pLDDT }
-            
-        
-            #print(self.proteinfold_data) # DEBUG
-            #print(f"'file: {filepath} - confidence {mean_pLDDT}") # DEBUG
+            if f["fn"].endswith(".a3m"):
+                num_lines = sum(1 for _ in open(filepath, "rb"))
+                msas = int(
+                    (num_lines / 2)
+                )  # cheap hack but it holds and a3m parsing isn't support - A3MIO breaks of Bio.Alphabet
+            self.proteinfold_data[samplename] = {"msas": msas}
+        # Now I need to nest these msa samples underneath the protein sample names
 
-        self.write_data_file(self.proteinfold_data, "proteinfold_data") # I want to structure and rename from avg_plDDT to summary_stats
+        # I can have this as "if pkl above doesn't exist go for the PDB"
+        for f in self.find_log_files("proteinfold/structs"):
+            samplename = f["s_name"]
+            self.add_data_source(f, section="structs")
+            mean_pLDDT = self.parse_pdb_or_mmcif_file(f)
+            self.proteinfold_data[samplename] = {"mean_pLDDT": mean_pLDDT}
+
+            # print(self.proteinfold_data) # DEBUG
+            # print(f"'file: {filepath} - confidence {mean_pLDDT}") # DEBUG
+
+        self.write_data_file(
+            self.proteinfold_data, "proteinfold_data"
+        )  # I want to structure and rename from avg_plDDT to summary_stats
         self.general_stats_table()
-    
 
     def general_stats_table(self):
-        '''
+        """
         Put protein structure prediction metrics into a general table for all different Deep Learning methods
-        '''
+        """
         headers = {
             "msas": {
                 "title": "Related Sequence Depth (MSAs)",
                 "description": "The number of related sequences (across the whole protein) that could be retrieved from the MSA (Multiple Sequence Alignment) stage",
-            }, 
+            },
             "mean_pLDDT": {
                 "title": "Confidence (average plDDT)",
                 "description": "Structure prediction confidence score across all residues in the protein - from the mean pLDDT (predicted Local Distance Difference Test) value",
@@ -128,112 +147,110 @@ class MultiqcModule(BaseMultiqcModule):
                     {"low": "#f9d613"},
                     {"high": "#60c2e8"},
                     {"very-high": "#014ecc"},
-                ]
+                ],
             },
-           "max_PAE": {
-               "title": "Max error in relative residue-residue positioning (PAE)",
-               "description": "The maximum confidence in the relatively positioning between different domains - examine to validate pausible interactions - from the PAE (Predicted Align Error) score",
-               "max": 31.75,
-               "min": 0,
-               "format" : "{:,.2f}", 
-               "scale": "Greens-rev",
+            "max_PAE": {
+                "title": "Max error in relative residue-residue positioning (PAE)",
+                "description": "The maximum confidence in the relatively positioning between different domains - examine to validate pausible interactions - from the PAE (Predicted Align Error) score",
+                "max": 31.75,
+                "min": 0,
+                "format": "{:,.2f}",
+                "scale": "Greens-rev",
             },
-           "pTM": {
-               "title": "Global accuracy (TM)",
-               "description": "Global accuracy of the protein folded, less sensitive to localised inaccuracies than raw 3D atomic deviations (RMSD) - from the pTM (predicted Template Modelling) score",
-               "max": 1,
-               "min": 0,
-               "format" : "{:,.2f}", 
-               "scale": "Blues",
+            "pTM": {
+                "title": "Global accuracy (TM)",
+                "description": "Global accuracy of the protein folded, less sensitive to localised inaccuracies than raw 3D atomic deviations (RMSD) - from the pTM (predicted Template Modelling) score",
+                "max": 1,
+                "min": 0,
+                "format": "{:,.2f}",
+                "scale": "Blues",
             },
-           "ipTM": {
-               "title": "Interface accuracy (ipTM)",
-               "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the ipTM (interface predicted Template Modelling) score",
-               "max": 1,
-               "min": 0,
-               "format" : "{:,.2f}", 
-               "scale": "Purples",
+            "ipTM": {
+                "title": "Interface accuracy (ipTM)",
+                "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the ipTM (interface predicted Template Modelling) score",
+                "max": 1,
+                "min": 0,
+                "format": "{:,.2f}",
+                "scale": "Purples",
             },
-           "ranking_confidence": {
-               "title": "Ranking order confidence",
-               "description": "A combination of varuous metrics that determine the order in which separate structure prediction models are ranked and  returned",
-               "max": 1,
-               "min": 0,
-               "format" : "{:,.2f}", 
-               "scale": "Greys",
+            "ranking_confidence": {
+                "title": "Ranking order confidence",
+                "description": "A combination of varuous metrics that determine the order in which separate structure prediction models are ranked and  returned",
+                "max": 1,
+                "min": 0,
+                "format": "{:,.2f}",
+                "scale": "Greys",
             },
         }
-      # example of how to summarise columns from FastQC  
+        # example of how to summarise columns from FastQC
         self.general_stats_addcols(self.proteinfold_data, headers)
-      #  group_samples_config=SampleGroupingConfig(
-      #         cols_to_sum=[ColumnKey("total_sequences")],
-      #         cols_to_weighted_average=[
-      #             (ColumnKey("percent_gc"), ColumnKey("total_sequences")),
-      #             (ColumnKey("avg_sequence_length"), ColumnKey("total_sequences")),
-      #             (ColumnKey("percent_duplicates"), ColumnKey("total_sequences")),
-      #             (ColumnKey("median_sequence_length"), ColumnKey("total_sequences")),
-      #         ],    
-        
 
+    #  group_samples_config=SampleGroupingConfig(
+    #         cols_to_sum=[ColumnKey("total_sequences")],
+    #         cols_to_weighted_average=[
+    #             (ColumnKey("percent_gc"), ColumnKey("total_sequences")),
+    #             (ColumnKey("avg_sequence_length"), ColumnKey("total_sequences")),
+    #             (ColumnKey("percent_duplicates"), ColumnKey("total_sequences")),
+    #             (ColumnKey("median_sequence_length"), ColumnKey("total_sequences")),
+    #         ],
 
     def parse_pdb_or_mmcif_file(self, f):
-        '''
+        """
         Extract any MultiQC relevant info from the PDB files. Currently gets pLDDT via a function
-        '''
-        filepath = f['root'] + '/' + f['fn']
-        samplename = f['s_name']
+        """
+        filepath = f["root"] + "/" + f["fn"]
+        samplename = f["s_name"]
         mean_pLDDT = extract_pLDDT_pdb(filepath, samplename)
         return mean_pLDDT
-    
+
     def parse_pickle_file(self, f):
-        '''
+        """
         Extract metrics from .pkl files. Typically generated from AlphaFold2
-        '''
-        filepath = f['root'] + '/' + f['fn']
-        samplename = f['s_name']
-        with open(filepath, 'rb') as f:
+        """
+        filepath = f["root"] + "/" + f["fn"]
+        with open(filepath, "rb") as f:
             try:
                 pkl_obj = pickle.load(f)
-            except pickle.UnpicklingError: 
-                return(None, None, None)
-            max_PAE = round(float(pkl_obj['max_predicted_aligned_error']),2)
-            pTM = round(float(pkl_obj['ptm']),2) 
-            ipTM = round(float(pkl_obj['iptm']),2)      
-            mean_pLDDT = round(float(pkl_obj['plddt'].mean()),2)      
-            ranking_confidence = round(float(pkl_obj['ranking_confidence']),2)      
-        
-        return(max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
-    
-    def parse_json_file(self, f):
-        '''
-        Extract metrics from .json files. Typically generated from HelixFold3 
-        '''
-        filepath = f['root'] + '/' + f['fn']
-        with open(filepath, 'rb') as f:
-            json_obj = json.load(f)
-            max_PAE = round(json_obj['pae'],2)
-            pTM = round(json_obj['ptm'],2)
-            ipTM = round(json_obj['iptm'],2)
-            mean_pLDDT = round(json_obj['mean_plddt'],2)      
-            ranking_confidence = float(round(json_obj['ranking_confidence'],2))      
-        
-        return(max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
-            
+            except pickle.UnpicklingError:
+                return (None, None, None)
+            max_PAE = round(float(pkl_obj["max_predicted_aligned_error"]), 2)
+            pTM = round(float(pkl_obj["ptm"]), 2)
+            ipTM = round(float(pkl_obj["iptm"]), 2)
+            mean_pLDDT = round(float(pkl_obj["plddt"].mean()), 2)
+            ranking_confidence = round(float(pkl_obj["ranking_confidence"]), 2)
 
-# Use this if there's no metric summary file available (.pkl, .json)    
+        return (max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+
+    def parse_json_file(self, f):
+        """
+        Extract metrics from .json files. Typically generated from HelixFold3
+        """
+        filepath = f["root"] + "/" + f["fn"]
+        with open(filepath, "rb") as f:
+            json_obj = json.load(f)
+            max_PAE = round(json_obj["pae"], 2)
+            pTM = round(json_obj["ptm"], 2)
+            ipTM = round(json_obj["iptm"], 2)
+            mean_pLDDT = round(json_obj["mean_plddt"], 2)
+            ranking_confidence = float(round(json_obj["ranking_confidence"], 2))
+
+        return (max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+
+
+# Use this if there's no metric summary file available (.pkl, .json)
 def extract_pLDDT_pdb(filepath, samplename) -> float:
-    '''
-    Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file 
-    '''
-    if samplename.endswith('.pdb'): 
+    """
+    Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file
+    """
+    if samplename.endswith(".pdb"):
         parser = PDB.PDBParser(QUIET=True)
-    elif samplename.endswith('.cif'): 
+    elif samplename.endswith(".cif"):
         parser = PDB.MMCIFParser(QUIET=True)
-    else: 
-        print("Neither a PDB or mmCIF file!") 
+    else:
+        print("Neither a PDB or mmCIF file!")
     structure = parser.get_structure(file=filepath, id=samplename)
-  
-    res_list = [] 
+
+    res_list = []
     pLDDT_tot = 0
 
     for model in structure:
@@ -244,17 +261,17 @@ def extract_pLDDT_pdb(filepath, samplename) -> float:
                 atom_list = residue.get_unpacked_list()
                 num_atoms = len(atom_list)
                 res_pLDDT_tot = 0
-                for atom in residue: # ESMFold and others have separate atom-wise values 
+                for atom in residue:  # ESMFold and others have separate atom-wise values
                     atom_pLDDT = atom.get_bfactor()
                     res_pLDDT_tot += atom_pLDDT
-                res_pLDDT = (res_pLDDT_tot / num_atoms)
+                res_pLDDT = res_pLDDT_tot / num_atoms
                 pLDDT_tot += res_pLDDT
     num_res = len(res_list)
-    pLDDT_mean = (pLDDT_tot / num_res) 
-   
-    if (pLDDT_mean < 1): # Should really check each program, but <1 pLDDTs are highlt improbable, so let's just convert to percentage
+    pLDDT_mean = pLDDT_tot / num_res
+
+    if (
+        pLDDT_mean < 1
+    ):  # Should really check each program, but <1 pLDDTs are highlt improbable, so let's just convert to percentage
         pLDDT_mean *= 100
 
-    return(round(pLDDT_mean,2))
-
-      
+    return round(pLDDT_mean, 2)
