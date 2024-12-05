@@ -125,6 +125,7 @@ class MultiqcModule(BaseMultiqcModule):
                "description": "The maximum confidence in the relatively positioning between different domains - examine to validate pausible interactions - from the PAE (Predicted Align Error) score",
                "max": 31.75,
                "min": 0,
+               "format" : "{:,.2f}", 
                "scale": "Greens-rev",
             },
            "pTM": {
@@ -132,6 +133,7 @@ class MultiqcModule(BaseMultiqcModule):
                "description": "Global accuracy of the protein folded, less sensitive to localised inaccuracies than raw 3D atomic deviations (RMSD) - from the pTM (predicted Template Modelling) score",
                "max": 1,
                "min": 0,
+               "format" : "{:,.2f}", 
                "scale": "Blues",
             },
            "ipTM": {
@@ -139,6 +141,7 @@ class MultiqcModule(BaseMultiqcModule):
                "description": "Accuracy of the relative positions of two protein subunits from a mulitmer calcuation - from the ipTM (interface predicted Template Modelling) score",
                "max": 1,
                "min": 0,
+               "format" : "{:,.2f}", 
                "scale": "Purples",
             },
            "ranking_confidence": {
@@ -146,6 +149,7 @@ class MultiqcModule(BaseMultiqcModule):
                "description": "A combination of varuous metrics that determine the order in which separate structure prediction models are ranked and  returned",
                "max": 1,
                "min": 0,
+               "format" : "{:,.2f}", 
                "scale": "Greys",
             },
         }
