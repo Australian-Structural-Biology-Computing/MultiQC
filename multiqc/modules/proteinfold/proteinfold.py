@@ -12,6 +12,16 @@ from Bio import AlignIO
 
 log = logging.getLogger(__name__)
 
+#### TO DO 
+#
+# - ESMFold - DONE - just produces a .pdb so parse_pdb_file() suffices  
+# - AlphaFold2 -
+# - AlphaFold3 - could be just an mmCIF  
+#
+#
+#
+#
+
 
 class MultiqcModule(BaseMultiqcModule):
     """
@@ -82,7 +92,7 @@ class MultiqcModule(BaseMultiqcModule):
         for f in self.find_log_files('proteinfold/structs'):
             samplename = f['s_name']
             self.add_data_source(f, section='structs')        
-            mean_pLDDT = self.parse_pdb_file(f)
+            mean_pLDDT = self.parse_pdb_or_mmcif_file(f)
             self.proteinfold_data[samplename] = { 'mean_pLDDT' : mean_pLDDT }
             
         
@@ -153,10 +163,20 @@ class MultiqcModule(BaseMultiqcModule):
                "scale": "Greys",
             },
         }
+      # example of how to summarise columns from FastQC  
         self.general_stats_addcols(self.proteinfold_data, headers)
+      #  group_samples_config=SampleGroupingConfig(
+      #         cols_to_sum=[ColumnKey("total_sequences")],
+      #         cols_to_weighted_average=[
+      #             (ColumnKey("percent_gc"), ColumnKey("total_sequences")),
+      #             (ColumnKey("avg_sequence_length"), ColumnKey("total_sequences")),
+      #             (ColumnKey("percent_duplicates"), ColumnKey("total_sequences")),
+      #             (ColumnKey("median_sequence_length"), ColumnKey("total_sequences")),
+      #         ],    
+        
 
 
-    def parse_pdb_file(self, f):
+    def parse_pdb_or_mmcif_file(self, f):
         '''
         Extract any MultiQC relevant info from the PDB files. Currently gets pLDDT via a function
         '''
@@ -205,9 +225,12 @@ def extract_pLDDT_pdb(filepath, samplename) -> float:
     '''
     Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file 
     '''
-#    with warnings.catch_warnings():
-    parser = PDB.PDBParser(QUIET=True)
-            #warnings.simplefilter('ignore', PDBConstructionWarning)
+    if samplename.endswith('.pdb'): 
+        parser = PDB.PDBParser(QUIET=True)
+    elif samplename.endswith('.cif'): 
+        parser = PDB.MMCIFParser(QUIET=True)
+    else: 
+        print("Neither a PDB or mmCIF file!") 
     structure = parser.get_structure(file=filepath, id=samplename)
   
     res_list = [] 
