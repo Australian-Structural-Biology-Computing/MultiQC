@@ -77,8 +77,9 @@ class MultiqcModule(BaseMultiqcModule):
 
             # should be: If AF2 read confidence_model and pae_model, and .pkl to find pTM and iPTM
             if f["fn"].endswith(".pkl"):  # might need and AF2 check
-                max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
-            if f["fn"] == "all_features.json":  # HF3
+                print("This code branch doesn't support .pkl files!")
+            #    max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
+            if f["fn"].endswith(".json"):  # HF3
                 max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
             # TO DO for boltz need to read npz
             print(
@@ -86,6 +87,7 @@ class MultiqcModule(BaseMultiqcModule):
             )
             self.proteinfold_data[samplename] = {
                 "max_PAE": max_PAE,  # probably not useful, you'll always have something with a high PAE. Will look at heatmap and other plots
+                "pTM-iPTM": pTM-ipTM
                 "pTM": pTM,
                 "ipTM": ipTM,
                 "mean_pLDDT": mean_pLDDT,  # mean pLDDT can be taken from .pkl, or pdb in absence of pickle. Here for 2nd check

@@ -1003,8 +1003,10 @@ xengsort:
   contents: "# Xengsort classify"
   num_lines: 2
 proteinfold/metrics:
-  - fn: "result_model_*_pred_*.pkl"
+#  - fn: "result_model_*_pred_*.pkl"
   - fn: "all_features.json"
+  - fn: "ranking_debug.json"
+  - fn: "confidence_model_*_multimer_*_pred_*.json"
 proteinfold/msas:
  - fn: "bfd_uniref_hits.a3m"
  - fn: "small_bfd_hits.a3m"
