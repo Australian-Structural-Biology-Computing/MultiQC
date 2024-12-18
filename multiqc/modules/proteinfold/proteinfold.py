@@ -79,14 +79,13 @@ class MultiqcModule(BaseMultiqcModule):
             if f["fn"].endswith(".pkl"):  # might need and AF2 check
                 print("This code branch doesn't support .pkl files!")
             #    max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
-            if f["fn"].endswith(".json"):  # HF3
-                max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
+            if f["fn"].endswith(".json"):  
+                pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
             # TO DO for boltz need to read npz
             print(
-                f"max_PAE: {max_PAE}, pTM: {pTM}, ipTM: {ipTM}, mean_pLDDT: {mean_pLDDT}, ranking_confidence: {ranking_confidence}"
+                f" pTM: {pTM}, ipTM: {ipTM}, mean_pLDDT: {mean_pLDDT}, ranking_confidence: {ranking_confidence}"
             )
             self.proteinfold_data[samplename] = {
-                "max_PAE": max_PAE,  # probably not useful, you'll always have something with a high PAE. Will look at heatmap and other plots
                 "pTM-iPTM": pTM-ipTM
                 "pTM": pTM,
                 "ipTM": ipTM,
@@ -101,11 +100,12 @@ class MultiqcModule(BaseMultiqcModule):
             if f["fn"].endswith(".sto"):
                 aln = AlignIO.read(filepath, "stockholm")
                 msas = len(aln)
+            if f["fn"].endswith(".m8"): # m8 is a foldseek variant of blast tabular format 8. Number of lines should match numb msas
+                num_lines = sum(1 for _ in open(filepath, "rb"))
+                msas = int(num_lines) 
             if f["fn"].endswith(".a3m"):
                 num_lines = sum(1 for _ in open(filepath, "rb"))
-                msas = int(
-                    (num_lines / 2)
-                )  # cheap hack but it holds and a3m parsing isn't support - A3MIO breaks of Bio.Alphabet
+                msas = int((num_lines / 2))  # cheap hack but it holds and a3m parsing isn't support - A3MIO breaks of Bio.Alphabet
             self.proteinfold_data[samplename] = {"msas": msas}
         # Now I need to nest these msa samples underneath the protein sample names
 
@@ -215,28 +215,37 @@ class MultiqcModule(BaseMultiqcModule):
                 pkl_obj = pickle.load(f)
             except pickle.UnpicklingError:
                 return (None, None, None)
-            max_PAE = round(float(pkl_obj["max_predicted_aligned_error"]), 2)
             pTM = round(float(pkl_obj["ptm"]), 2)
             ipTM = round(float(pkl_obj["iptm"]), 2)
             mean_pLDDT = round(float(pkl_obj["plddt"].mean()), 2)
             ranking_confidence = round(float(pkl_obj["ranking_confidence"]), 2)
 
-        return (max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+        return (pTM, ipTM, mean_pLDDT, ranking_confidence)
 
     def parse_json_file(self, f):
         """
-        Extract metrics from .json files. Typically generated from HelixFold3
+        Extract metrics from .json files. The method type is specified
         """
         filepath = f["root"] + "/" + f["fn"]
+        method_type = None
+
+        if f["fn"] == "all_results.json":
+            method_type = "HelixFold3"
+        else:
+            method_type = "Boltz-1" #there will be others, add them later. Ignoring PDE for now 
+
         with open(filepath, "rb") as f:
             json_obj = json.load(f)
-            max_PAE = round(json_obj["pae"], 2)
             pTM = round(json_obj["ptm"], 2)
             ipTM = round(json_obj["iptm"], 2)
-            mean_pLDDT = round(json_obj["mean_plddt"], 2)
-            ranking_confidence = float(round(json_obj["ranking_confidence"], 2))
+            if method_type == "HelixFold3":
+                mean_pLDDT = round(json_obj["mean_plddt"], 2)
+                ranking_confidence = float(round(json_obj["ranking_confidence"], 2))
+            elif method_type == "HelixFold3":
+                mean_pLDDT = round(json_obj["complex_plddt"], 2)
+                ranking_confidence = float(round(json_obj["confidence_score"], 2))
 
-        return (max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence)
+        return (pTM, ipTM, mean_pLDDT, ranking_confidence)
 
 
 # Use this if there's no metric summary file available (.pkl, .json)
