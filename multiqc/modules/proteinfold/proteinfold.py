@@ -3,6 +3,7 @@ import re
 import warnings
 import pickle
 import json
+import numpy as np
 
 from multiqc.base_module import BaseMultiqcModule, ModuleNoSamplesFound
 from multiqc.plots import bargraph
@@ -69,29 +70,39 @@ class MultiqcModule(BaseMultiqcModule):
         # HF3 has final_features.pkl look in pkl_obj['feat'].keys() you get IDs but not values
         # HF3 has all_results.json
 
-        for f in self.find_log_files(
-            "proteinfold/metrics"
-        ):  # need to set log_filesize_limit to 4GB in ./multiqc/config_defaults.yaml. It's slow so should preferentially use json
-            self.add_data_source(f, section="metrics")
+        for f in self.find_log_files("proteinfold/metrics_summary"): 
+            self.add_data_source(f, section="metrics_summary")
             samplename = f["s_name"]
 
-            # should be: If AF2 read confidence_model and pae_model, and .pkl to find pTM and iPTM
-            if f["fn"].endswith(".pkl"):  # might need and AF2 check
-                print("This code branch doesn't support .pkl files!")
-            #    max_PAE, pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_pickle_file(f)
-            if f["fn"].endswith(".json"):  
+            # should be: If AF2 want to dump pTM and iPTM from .pkl in .json
+            if f["fn"].endswith(".json"):
                 pTM, ipTM, mean_pLDDT, ranking_confidence = self.parse_json_file(f)
-            # TO DO for boltz need to read npz
-            print(
-                f" pTM: {pTM}, ipTM: {ipTM}, mean_pLDDT: {mean_pLDDT}, ranking_confidence: {ranking_confidence}"
-            )
+
             self.proteinfold_data[samplename] = {
-                "pTM-iPTM": pTM-ipTM
                 "pTM": pTM,
                 "ipTM": ipTM,
-                "mean_pLDDT": mean_pLDDT,  # mean pLDDT can be taken from .pkl, or pdb in absence of pickle. Here for 2nd check
+                "mean_pLDDT": mean_pLDDT,  
                 "ranking_confidence": ranking_confidence,
             }
+        
+        for f in self.find_log_files("proteinfold/metrics_residue-wise"):
+            self.add_data_source(f, section="metrics_residue-wise")
+            filepath = f["root"] + "/" + f["fn"]
+            samplename = f["s_name"]
+           
+            if f["fn"].endswith(".pkl"): # need to set log_filesize_limit to 4GB in ./multiqc/config_defaults.yaml. It's slow so should preferentially use json
+                pLDDT_per_res, PAE_per_res =  parse_pickle_file(f)
+
+            if f["fn"].endswith(".npz"): 
+                npz_data = np.load(filepath) 
+                if f["fn"].startswith("pLDDT_"):
+                    pLDDT_per_res = npz_data['pLDDT']  #numpy ndarray, I think this is also true for pkl etc
+                if f["fn"].startswith("pae_"):
+                    pae_per_res = npz_data['pae'] 
+                if f["fn"].startswith("pae_"):
+                    pde_per_res = npz_data['pde'] 
+
+
 
         for f in self.find_log_files("proteinfold/msas"):
             self.add_data_source(f, section="msas")
@@ -109,15 +120,12 @@ class MultiqcModule(BaseMultiqcModule):
             self.proteinfold_data[samplename] = {"msas": msas}
         # Now I need to nest these msa samples underneath the protein sample names
 
-        # I can have this as "if pkl above doesn't exist go for the PDB"
         for f in self.find_log_files("proteinfold/structs"):
             samplename = f["s_name"]
             self.add_data_source(f, section="structs")
             mean_pLDDT = self.parse_pdb_or_mmcif_file(f)
             self.proteinfold_data[samplename] = {"mean_pLDDT": mean_pLDDT}
 
-            # print(self.proteinfold_data) # DEBUG
-            # print(f"'file: {filepath} - confidence {mean_pLDDT}") # DEBUG
 
         self.write_data_file(
             self.proteinfold_data, "proteinfold_data"
@@ -200,9 +208,7 @@ class MultiqcModule(BaseMultiqcModule):
         """
         Extract any MultiQC relevant info from the PDB files. Currently gets pLDDT via a function
         """
-        filepath = f["root"] + "/" + f["fn"]
-        samplename = f["s_name"]
-        mean_pLDDT = extract_pLDDT_pdb(filepath, samplename)
+        mean_pLDDT = extract_pLDDT_pdb(f)
         return mean_pLDDT
 
     def parse_pickle_file(self, f):
@@ -215,25 +221,28 @@ class MultiqcModule(BaseMultiqcModule):
                 pkl_obj = pickle.load(f)
             except pickle.UnpicklingError:
                 return (None, None, None)
-            pTM = round(float(pkl_obj["ptm"]), 2)
-            ipTM = round(float(pkl_obj["iptm"]), 2)
-            mean_pLDDT = round(float(pkl_obj["plddt"].mean()), 2)
-            ranking_confidence = round(float(pkl_obj["ranking_confidence"]), 2)
+            #pTM = round(float(pkl_obj["ptm"]), 2)
+            #ipTM = round(float(pkl_obj["iptm"]), 2)
+            pLDDT_per_res = pkl_obj["plddt"]
+            PAE_per_res = pkl_obj["pae"]
+            #ranking_confidence = round(float(pkl_obj["ranking_confidence"]), 2)
 
-        return (pTM, ipTM, mean_pLDDT, ranking_confidence)
+        return (pLDDT_per_res, PAE_per_res)
+        #return (pTM, ipTM, mean_pLDDT, ranking_confidence)
 
     def parse_json_file(self, f):
         """
         Extract metrics from .json files. The method type is specified
         """
         filepath = f["root"] + "/" + f["fn"]
-        method_type = None
+        samplename = f["s_name"]
 
-        if f["fn"] == "all_results.json":
+        method_type = None
+        if samplename == "all_results.json":
             method_type = "HelixFold3"
         else:
-            method_type = "Boltz-1" #there will be others, add them later. Ignoring PDE for now 
-
+            method_type = "Boltz-1" #there will be others, add them later. Ignoring PDE for now
+ 
         with open(filepath, "rb") as f:
             json_obj = json.load(f)
             pTM = round(json_obj["ptm"], 2)
@@ -241,25 +250,29 @@ class MultiqcModule(BaseMultiqcModule):
             if method_type == "HelixFold3":
                 mean_pLDDT = round(json_obj["mean_plddt"], 2)
                 ranking_confidence = float(round(json_obj["ranking_confidence"], 2))
-            elif method_type == "HelixFold3":
-                mean_pLDDT = round(json_obj["complex_plddt"], 2)
+            elif method_type == "Boltz-1":
+                mean_pLDDT = round(json_obj["complex_plddt"]*100, 2)
                 ranking_confidence = float(round(json_obj["confidence_score"], 2))
 
         return (pTM, ipTM, mean_pLDDT, ranking_confidence)
 
 
 # Use this if there's no metric summary file available (.pkl, .json)
-def extract_pLDDT_pdb(filepath, samplename) -> float:
+def extract_pLDDT_pdb(f) -> float:
     """
     Uses the BioPython PDB packaged to extract pLDDT values from the b-factor column. Iterates of PDB objects rather than processes raw file
     """
-    if samplename.endswith(".pdb"):
+    filepath = f["root"] + "/" + f["fn"]
+    samplename = f["s_name"]
+
+    if f["fn"].endswith(".pdb"):
         parser = PDB.PDBParser(QUIET=True)
-    elif samplename.endswith(".cif"):
+        structure = parser.get_structure(id=samplename, file=filepath)
+    elif f["fn"].endswith(".cif"):
         parser = PDB.MMCIFParser(QUIET=True)
+        structure = parser.get_structure(structure_id=samplename, filename=filepath)
     else:
         print("Neither a PDB or mmCIF file!")
-    structure = parser.get_structure(file=filepath, id=samplename)
 
     res_list = []
     pLDDT_tot = 0
