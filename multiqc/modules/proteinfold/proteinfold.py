@@ -1,8 +1,9 @@
 from pathlib import Path
 import pandas as pd
+import numpy as np # To efficiently handle MSA data for coverage plot
 
 from multiqc.base_module import BaseMultiqcModule, ModuleNoSamplesFound
-from multiqc.plots import bargraph, linegraph
+from multiqc.plots import bargraph, linegraph, heatmap
 from multiqc import config  # I want the ranks to merge by default, not a user problem
 
 class MultiqcModule(BaseMultiqcModule):
@@ -112,6 +113,7 @@ class MultiqcModule(BaseMultiqcModule):
             if f["fn"].endswith("_msa.tsv"):
                 df = pd.read_csv(filepath, sep="\t")
                 self.proteinfold_data[samplename]["msa_depth"] = len(df)
+                self.proteinfold_data[samplename]["msa"] = df
 
             if f["fn"].endswith("_chainwise_iptm.tsv"):
                 df = pd.read_csv(filepath, sep="\t", index_col=0)
@@ -146,17 +148,18 @@ class MultiqcModule(BaseMultiqcModule):
         self.write_data_file(self.proteinfold_data, "proteinfold_data")  # I want to structure and rename from avg_plDDT to summary_stats
         self.general_stats_table()
 
-        # More detailed plots for each protein that don't rely as much on inspecting structure
+        # More detailed plots for each protein that don't necessarily rely on inspecting structure
         self.plddt_line_plot()
-        self.msa_depth_plot()
-        self.pairwise_iptm_heatmap()
+        # Only create MSA plot if explicitly enabled (disabled by default due to size)
+        if getattr(config, 'proteinfold', {}).get('msa_coverage_plot', False):
+            self.msa_coverage_plot()
 
     def general_stats_table(self):
         """
         Put protein structure prediction metrics into a general table for all different Deep Learning methods
         """
+    
         # Check for empy metrics to drop those columns where not appropriate
-
         has_iptm = any(
             sample_data.get("iptm") and sample_data.get("iptm") != 0.0
             for sample_data in self.proteinfold_data.values()
@@ -214,13 +217,12 @@ class MultiqcModule(BaseMultiqcModule):
         self.general_stats_addcols(self.proteinfold_data, headers)
 
     def plddt_line_plot(self):
-        """Line plot showing pLDDT confidence across residue position of selected sample, for all ranks"""
+        """Line plot showing pLDDT confidence across residue position of selectable sample, for all ranks"""
 
         parent_samples = {}
 
         for sample, metrics in self.proteinfold_data.items():
-            if "plddt" in metrics:
-                if "_rank_" not in sample: # The parent sample already has the plddt data for all ranks
+            if "plddt" in metrics and "_rank_" not in sample: # The parent sample already has the plddt data for all ranks
                     parent_samples[sample] = metrics["plddt"]
 
         data_labels = [] # Need a data_labels list for the sample switcher
@@ -236,9 +238,8 @@ class MultiqcModule(BaseMultiqcModule):
        
         pconfig = {
             "id": "proteinfold_plddt_lineplot",
-            "title": "ProteinFold: pLDDT by Position",
-            "xlab": "Residue Position",
-            "ylab": "pLDDT Score",
+            "title": "pLDDT by residue",
+            "xlab": "Residue position",
             "ymin": 0,
             "ymax": 100,
             "data_labels": data_labels
@@ -254,8 +255,64 @@ class MultiqcModule(BaseMultiqcModule):
         )     
 
 
-    def msa_depth_plot(self):
-        pass    
+    def msa_coverage_plot(self):
+        """Heatmap showing multiple sequence alignment (MSA) depth across residue position of selectable sample
 
-    def pairwise_iptm_heatmap(self):
-        pass
+        Note: Disabled by default due to very large data size (ten thousands of sequences *per* protein).
+        It will slow down report generation and may crash the HTML renderer
+
+        Can be enabled with config: proteinfold: {msa_depth_plot: true}        
+        """
+
+        parent_samples = {}
+
+        for sample, metrics in self.proteinfold_data.items():
+            if "msa" in metrics and "_rank_" not in sample: # The parent sample already has the plddt data for all ranks
+                df = metrics["msa"]
+                msa = df.values
+
+                # Calculate identity score to first sequence, sort, weight by identity     
+                # 21 is the special 'gap character' int
+                seqid = np.array([np.mean(msa[0] == seq) for seq in msa])
+                seqid_sort = np.argsort(seqid)
+                coverage = ((msa != 21).astype(int)[seqid_sort].T * seqid[seqid_sort]).T               
+                
+                num_seq, num_res = coverage.shape
+                ycats = [f"Seq {i}" for i in range(num_seq)]  
+                xcats = [f"{i}" for i in range(num_res)]  
+ 
+                parent_samples[sample] = {
+                    'data': coverage.tolist(),
+                    'ycats': ycats,
+                    'xcats': xcats
+                } 
+        
+        data_labels = [{"name": sample, "ylab": "Weighted Coverage"} for sample in parent_samples.keys()]
+        plot_data_list = [info['data'] for info in parent_samples.values()] 
+        ycats_list = [info['ycats'] for info in parent_samples.values()] 
+        xcats_list = [info['xcats'] for info in parent_samples.values()] 
+
+        pconfig = {
+            "id": "proteinfold_msa",
+            "title": "Multiple sequence alignment coverage",
+            "xlab": "Residue position",
+            "ylab": "Related sequences (sorted by identity)",
+            "data_labels": data_labels,
+            "square": False,
+            "min": 0,
+            "max": 1,
+        }
+ 
+        plot_html = heatmap.plot(
+            plot_data_list,
+            xcats=xcats_list[0],
+            ycats=ycats_list[0],
+            pconfig=pconfig
+        )
+        
+        self.add_section(
+            name='Multiple sequence alignment',
+            anchor='proteinfold-msa',
+            description='Multiple sequence alignment (MSA) coverage sorted by indentity to query sequence',
+            plot=plot_html
+        )     
